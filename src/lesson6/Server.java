@@ -1,53 +1,57 @@
 package lesson6;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
-import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.Scanner;
 
 public class Server {
-    private static int PORT= 8189;
-
     public static void main(String[] args) {
-        ServerSocket server = null;
-        Socket socket = null;
+        Scanner scanner = new Scanner(System.in);
+        Socket clientSocket = null;
 
-        try {                   //можно сделать try с ресурсами
-            server = new ServerSocket(PORT);   //передаем порт
+        try (ServerSocket serverSocket = new ServerSocket(8189)) {        //передаем порт
             System.out.println("Сервер запущен");
+            clientSocket = serverSocket.accept();  //сохраняется клиентский сокет. Здесь поток останавливается и ждет подключение!
+            System.out.println("Подключился клиент: " + clientSocket.getRemoteSocketAddress()); //адрес подключенного клиента
+            DataInputStream inputStream = new DataInputStream(clientSocket.getInputStream());  //для чтения
+            DataOutputStream outputStream = new DataOutputStream(clientSocket.getOutputStream()); //для отправки
 
-            socket = server.accept();  //сохраняется клиентский сокет. Здесь поток останавливается и ждет подключение!
-            System.out.println("Клиент подключился");
+            //поток на чтение
+            Thread threadReader = new Thread(() -> {
+                try {
+                    while (true) {
+                        outputStream.writeUTF(scanner.nextLine());
+                    }
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            });
+            threadReader.setDaemon(true);
+            threadReader.start();
 
-            Scanner in = new Scanner(socket.getInputStream());
-            //Scanner outMsg;
-
-            while (true){
-                String str = in.nextLine();
-                PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
-
-                if(str.equals("/end")){   //выход
+            while (true) {
+                String str = inputStream.readUTF();
+                if (str.equals("/close")) { //отслеживаем выход клиента
                     System.out.println("Клиент отключился");
+                    outputStream.writeUTF("/close");
                     break;
+                } else {        //печатаем сообщения
+                    System.out.println("Клиент: " + str);
                 }
-                System.out.println("Клиент: " + str);
-                out.println("echo: " + str);
-                }
-
+            }
         } catch (IOException e) {
             e.printStackTrace();
         } finally {
             try {
-                socket.close();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-            try {
-                server.close();   //всегда закрываем системные ресурсы
-            } catch (IOException e) {
+                clientSocket.close();
+            } catch (IOException | NullPointerException e) {
                 e.printStackTrace();
             }
         }
     }
 }
+
+
